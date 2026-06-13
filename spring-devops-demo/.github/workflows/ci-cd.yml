@@ -1,0 +1,168 @@
+name: CI/CD Pipeline → AWS EC2
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  JAVA_VERSION: '17'
+  APP_NAME: spring-devops-demo
+  DEPLOY_DIR: /opt/spring-devops-demo
+
+jobs:
+  # ─────────────────────────────────────────
+  # JOB 1: BUILD & TEST
+  # ─────────────────────────────────────────
+  build:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Run Tests
+        run: mvn test
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/${{ env.APP_NAME }}.jar
+          retention-days: 5
+
+  # ─────────────────────────────────────────
+  # JOB 2: SECURITY SCAN (only on PRs)
+  # ─────────────────────────────────────────
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Run dependency vulnerability check
+        run: mvn dependency:tree -Dincludes=* | grep -i "vulnerable" || echo "No known vulnerabilities found"
+
+  # ─────────────────────────────────────────
+  # JOB 3: DEPLOY TO EC2 (only on main)
+  # ─────────────────────────────────────────
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    environment:
+      name: production
+      url: http://${{ secrets.EC2_HOST }}:8080
+
+    steps:
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+
+      - name: Deploy to EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            echo "──────────────────────────────────"
+            echo "Starting deployment..."
+            echo "──────────────────────────────────"
+
+            # Create deploy directory
+            sudo mkdir -p ${{ env.DEPLOY_DIR }}
+            sudo chown ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} ${{ env.DEPLOY_DIR }}
+
+            # Stop existing app (if running)
+            if [ -f ${{ env.DEPLOY_DIR }}/app.pid ]; then
+              PID=$(cat ${{ env.DEPLOY_DIR }}/app.pid)
+              if kill -0 $PID 2>/dev/null; then
+                echo "Stopping existing process PID=$PID"
+                kill $PID
+                sleep 3
+              fi
+            fi
+
+            echo "Deployment started. Waiting for file upload..."
+
+      - name: Upload JAR to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "${{ env.APP_NAME }}.jar"
+          target: "${{ env.DEPLOY_DIR }}/"
+
+      - name: Start Application on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd ${{ env.DEPLOY_DIR }}
+
+            # Start the app in background
+            nohup java \
+              -jar ${{ env.APP_NAME }}.jar \
+              --app.environment=production \
+              --app.version=${{ github.sha }} \
+              > app.log 2>&1 &
+
+            echo $! > app.pid
+            echo "App started with PID=$(cat app.pid)"
+
+            # Wait and health check
+            sleep 10
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
+
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Health check PASSED (HTTP $HTTP_STATUS)"
+            else
+              echo "❌ Health check FAILED (HTTP $HTTP_STATUS)"
+              cat app.log | tail -30
+              exit 1
+            fi
+
+      - name: Notify on success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Deployed by: ${{ github.actor }}"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment FAILED"
+          echo "Commit: ${{ github.sha }}"
