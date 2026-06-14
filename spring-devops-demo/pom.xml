@@ -7,7 +7,7 @@
 
     <groupId>com.devops</groupId>
     <artifactId>spring-devops-demo</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <packaging>jar</packaging>
 
     <name>Spring DevOps Demo</name>
@@ -35,6 +35,18 @@
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
         </dependency>
 
+        <!-- Thymeleaf <-> Spring Security integration (sec:authorize etc.) -->
+        <dependency>
+            <groupId>org.thymeleaf.extras</groupId>
+            <artifactId>thymeleaf-extras-springsecurity6</artifactId>
+        </dependency>
+
+        <!-- Spring Security -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
         <!-- Spring Data JPA -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -48,7 +60,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- PostgreSQL driver (comment out H2 and enable this for production) -->
+        <!-- PostgreSQL driver — uncomment for production -->
         <!--
         <dependency>
             <groupId>org.postgresql</groupId>
@@ -80,6 +92,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

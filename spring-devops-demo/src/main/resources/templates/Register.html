@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Register · Spring DevOps Demo</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg:      #0a0e1a;
+            --surface: #111827;
+            --border:  #1f2937;
+            --accent:  #00d4aa;
+            --accent2: #7c3aed;
+            --text:    #e2e8f0;
+            --muted:   #6b7280;
+            --high:    #ef4444;
+            --done:    #10b981;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Space Grotesk', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-image:
+                linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .brand {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+        }
+        .brand span { color: var(--muted); }
+        .tagline {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.25rem 2.5rem;
+            width: 100%;
+            max-width: 420px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+
+        .card-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.3rem; }
+        .card-sub   { font-size: 0.83rem; color: var(--muted); margin-bottom: 1.75rem; }
+
+        .alert {
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .alert-error { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+        .alert-dot   { width:7px; height:7px; border-radius:50%; background: var(--high); flex-shrink:0; }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1.1rem;
+        }
+        .form-group label { font-size: 0.8rem; color: var(--muted); font-weight: 600; letter-spacing: 0.03em; }
+        .form-group input {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 0.7rem 1rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+        .form-group input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0,212,170,0.1);
+        }
+        .form-group input::placeholder { color: var(--muted); opacity: 0.6; }
+
+        /* Password strength bar */
+        .strength-wrap { margin-top: 0.4rem; }
+        .strength-bar  { height: 3px; background: var(--border); border-radius: 999px; overflow: hidden; }
+        .strength-fill { height: 100%; width: 0; border-radius: 999px; transition: width 0.3s, background 0.3s; }
+        .strength-label { font-size: 0.72rem; color: var(--muted); margin-top: 0.3rem; }
+
+        .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.25rem; }
+
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: inherit;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .btn-primary:hover  { opacity: 0.88; }
+        .btn-primary:active { transform: scale(0.98); }
+
+        .card-footer { text-align: center; margin-top: 1.5rem; font-size: 0.83rem; color: var(--muted); }
+        .card-footer a { color: var(--accent); text-decoration: none; font-weight: 600; }
+        .card-footer a:hover { text-decoration: underline; }
+
+        /* Requirements checklist */
+        .req-list { list-style: none; margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem; }
+        .req-list li { font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; gap: 0.4rem; }
+        .req-list li::before { content: '○'; font-size: 0.7rem; flex-shrink: 0; }
+        .req-list li.met { color: var(--done); }
+        .req-list li.met::before { content: '✓'; }
+    </style>
+</head>
+<body>
+
+<div class="brand">spring<span>/</span>devops-demo</div>
+<div class="tagline">$ useradd --create-home</div>
+
+<div class="card">
+    <div class="card-title">Create account</div>
+    <div class="card-sub">Join the pipeline. All fields are required.</div>
+
+    <div th:if="${error}" class="alert alert-error">
+        <span class="alert-dot"></span>
+        <span th:text="${error}">Something went wrong.</span>
+    </div>
+
+    <form th:action="@{/register}" method="post" id="reg-form">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username"
+                   placeholder="min 3 characters" autocomplete="username"
+                   minlength="3" maxlength="50" required autofocus/>
+            <span class="hint">Letters, numbers, underscores. Min 3 chars.</span>
+        </div>
+
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password"
+                   placeholder="min 6 characters" autocomplete="new-password"
+                   minlength="6" required/>
+            <div class="strength-wrap">
+                <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+                <div class="strength-label" id="strength-label">Enter a password</div>
+            </div>
+            <ul class="req-list" id="req-list">
+                <li id="req-len">At least 6 characters</li>
+                <li id="req-num">Contains a number</li>
+                <li id="req-sym">Contains a symbol</li>
+            </ul>
+        </div>
+
+        <div class="form-group">
+            <label for="confirmPassword">Confirm password</label>
+            <input type="password" id="confirmPassword" name="confirmPassword"
+                   placeholder="repeat password" autocomplete="new-password" required/>
+            <span class="hint" id="match-hint" style="display:none; color: var(--high);">Passwords do not match.</span>
+        </div>
+
+        <button type="submit" class="btn-primary" id="submit-btn">Create account →</button>
+    </form>
+
+    <div class="card-footer">
+        Already have an account? <a href="/login">Sign in</a>
+    </div>
+</div>
+
+<script>
+    // ── Live password strength + requirements ─────────────────────────────────
+    const pwInput    = document.getElementById('password');
+    const fill       = document.getElementById('strength-fill');
+    const label      = document.getElementById('strength-label');
+    const reqLen     = document.getElementById('req-len');
+    const reqNum     = document.getElementById('req-num');
+    const reqSym     = document.getElementById('req-sym');
+    const cpInput    = document.getElementById('confirmPassword');
+    const matchHint  = document.getElementById('match-hint');
+    const submitBtn  = document.getElementById('submit-btn');
+
+    function checkStrength(pw) {
+        const hasLen = pw.length >= 6;
+        const hasNum = /\d/.test(pw);
+        const hasSym = /[^a-zA-Z0-9]/.test(pw);
+
+        reqLen.classList.toggle('met', hasLen);
+        reqNum.classList.toggle('met', hasNum);
+        reqSym.classList.toggle('met', hasSym);
+
+        const score = [hasLen, hasNum, hasSym].filter(Boolean).length;
+        const pct   = score === 0 ? 0 : score === 1 ? 30 : score === 2 ? 65 : 100;
+        const color = score <= 1 ? '#ef4444' : score === 2 ? '#f59e0b' : '#10b981';
+        const text  = score === 0 ? 'Enter a password'
+                    : score === 1 ? 'Weak'
+                    : score === 2 ? 'Fair'
+                    : 'Strong';
+
+        fill.style.width      = pct + '%';
+        fill.style.background = color;
+        label.textContent     = text;
+        label.style.color     = score === 0 ? 'var(--muted)' : color;
+    }
+
+    function checkMatch() {
+        const match = pwInput.value === cpInput.value;
+        matchHint.style.display = cpInput.value && !match ? 'block' : 'none';
+        return match || !cpInput.value;
+    }
+
+    pwInput.addEventListener('input', () => {
+        checkStrength(pwInput.value);
+        if (cpInput.value) checkMatch();
+    });
+
+    cpInput.addEventListener('input', checkMatch);
+
+    document.getElementById('reg-form').addEventListener('submit', function (e) {
+        if (pwInput.value !== cpInput.value) {
+            e.preventDefault();
+            matchHint.style.display = 'block';
+        }
+    });
+</script>
+</body>
+</html>

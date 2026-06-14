@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<html xmlns:th="http://www.thymeleaf.org" xmlns:sec="http://www.thymeleaf.org/extras/spring-security" lang="en">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
@@ -48,6 +48,31 @@
             padding: 0.25rem 0.75rem;
             border-radius: 999px;
         }
+        .topbar-right { display: flex; align-items: center; gap: 0.75rem; }
+        .user-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .user-badge .user-dot {
+            width: 7px; height: 7px; border-radius: 50%;
+            background: var(--done); box-shadow: 0 0 5px var(--done);
+        }
+        .btn-logout {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            background: rgba(239,68,68,0.1);
+            color: #fca5a5;
+            border: 1px solid rgba(239,68,68,0.25);
+            padding: 0.22rem 0.65rem;
+            border-radius: 999px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-logout:hover { background: rgba(239,68,68,0.2); }
 
         /* ── Layout ──────────────────────────────────────────────────────── */
         .container { max-width: 960px; margin: 0 auto; padding: 2rem; }
@@ -321,7 +346,17 @@
 <!-- ── Topbar ─────────────────────────────────────────────────────────────── -->
 <div class="topbar">
     <div class="logo">spring<span>/</span>devops-demo</div>
-    <div class="env-badge" th:text="'v' + ${appVersion} + ' · ' + ${environment}">v2.0.0 · production</div>
+    <div class="topbar-right">
+        <div class="env-badge" th:text="'v' + ${appVersion} + ' · ' + ${environment}">v2.0.0 · production</div>
+        <!-- Show logged-in username + logout button -->
+        <div class="user-badge" sec:authorize="isAuthenticated()">
+            <span class="user-dot"></span>
+            <span sec:authentication="name">user</span>
+        </div>
+        <form sec:authorize="isAuthenticated()" th:action="@{/logout}" method="post" style="display:inline">
+            <button type="submit" class="btn-logout">logout</button>
+        </form>
+    </div>
 </div>
 
 <!-- ── Toast container — populated by JS from flash attributes ────────────── -->

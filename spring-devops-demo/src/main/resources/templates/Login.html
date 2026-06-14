@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Login · Spring DevOps Demo</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet"/>
+    <style>
+        :root {
+            --bg:      #0a0e1a;
+            --surface: #111827;
+            --border:  #1f2937;
+            --accent:  #00d4aa;
+            --accent2: #7c3aed;
+            --text:    #e2e8f0;
+            --muted:   #6b7280;
+            --high:    #ef4444;
+            --done:    #10b981;
+        }
+        *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Space Grotesk', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            /* subtle grid background */
+            background-image:
+                linear-gradient(rgba(0,212,170,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,212,170,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        /* ── Brand header ────────────────────────────────────────────────── */
+        .brand {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin-bottom: 0.4rem;
+            letter-spacing: -0.01em;
+        }
+        .brand span { color: var(--muted); }
+        .tagline {
+            font-size: 0.8rem;
+            color: var(--muted);
+            margin-bottom: 2rem;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* ── Card ────────────────────────────────────────────────────────── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2.25rem 2.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.4);
+        }
+
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-bottom: 0.3rem;
+        }
+        .card-sub {
+            font-size: 0.83rem;
+            color: var(--muted);
+            margin-bottom: 1.75rem;
+        }
+
+        /* ── Alerts ──────────────────────────────────────────────────────── */
+        .alert {
+            padding: 0.7rem 1rem;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            margin-bottom: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .alert-error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.3);  color: #fca5a5; }
+        .alert-success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
+        .alert-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+        .alert-error .alert-dot   { background: var(--high); }
+        .alert-success .alert-dot { background: var(--done); }
+
+        /* ── Form ────────────────────────────────────────────────────────── */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+            margin-bottom: 1.1rem;
+        }
+        .form-group label {
+            font-size: 0.8rem;
+            color: var(--muted);
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+        .form-group input {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 0.7rem 1rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            width: 100%;
+        }
+        .form-group input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(0,212,170,0.1);
+        }
+        .form-group input::placeholder { color: var(--muted); opacity: 0.6; }
+
+        /* ── Submit button ───────────────────────────────────────────────── */
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem;
+            font-family: inherit;
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-top: 0.5rem;
+            transition: opacity 0.2s, transform 0.15s;
+            letter-spacing: 0.01em;
+        }
+        .btn-primary:hover  { opacity: 0.88; }
+        .btn-primary:active { transform: scale(0.98); }
+
+        /* ── Footer link ─────────────────────────────────────────────────── */
+        .card-footer {
+            text-align: center;
+            margin-top: 1.5rem;
+            font-size: 0.83rem;
+            color: var(--muted);
+        }
+        .card-footer a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+        }
+        .card-footer a:hover { text-decoration: underline; }
+
+        /* ── Default credentials hint (dev only) ─────────────────────────── */
+        .dev-hint {
+            margin-top: 1.5rem;
+            padding: 0.65rem 1rem;
+            background: rgba(124,58,237,0.08);
+            border: 1px solid rgba(124,58,237,0.2);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.72rem;
+            color: #a78bfa;
+            line-height: 1.6;
+        }
+        .dev-hint strong { color: #c4b5fd; }
+    </style>
+</head>
+<body>
+
+<div class="brand">spring<span>/</span>devops-demo</div>
+<div class="tagline">$ ssh admin@pipeline</div>
+
+<div class="card">
+    <div class="card-title">Sign in</div>
+    <div class="card-sub">Enter your credentials to access the dashboard.</div>
+
+    <!-- Error / logout messages -->
+    <div th:if="${error}"  class="alert alert-error">
+        <span class="alert-dot"></span>
+        <span th:text="${error}">Invalid credentials.</span>
+    </div>
+    <div th:if="${logout}" class="alert alert-success">
+        <span class="alert-dot"></span>
+        <span th:text="${logout}">Logged out.</span>
+    </div>
+    <div th:if="${success}" class="alert alert-success">
+        <span class="alert-dot"></span>
+        <span th:text="${success}">Account created!</span>
+    </div>
+
+    <!--
+        Spring Security intercepts POST /login — no controller needed.
+        The _csrf token is automatically injected by the Thymeleaf Security dialect.
+    -->
+    <form th:action="@{/login}" method="post">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username"
+                   placeholder="your-username" autocomplete="username" required autofocus/>
+        </div>
+        <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password"
+                   placeholder="••••••••" autocomplete="current-password" required/>
+        </div>
+        <button type="submit" class="btn-primary">Sign in →</button>
+    </form>
+
+    <div class="card-footer">
+        No account? <a href="/register">Create one</a>
+    </div>
+
+    <!-- Dev hint — remove or gate behind a profile in production -->
+<!--    <div class="dev-hint">-->
+<!--        <strong>Default admin:</strong><br/>-->
+<!--        username: <strong>admin</strong> &nbsp;·&nbsp; password: <strong>admin123</strong>-->
+<!--    </div>-->
+</div>
+
+</body>
+</html>
