@@ -1,7 +1,9 @@
 package com.devops.demo.service;
 
 import com.devops.demo.model.Task;
+import com.devops.demo.model.User;
 import com.devops.demo.repository.TaskRepository;
+import com.devops.demo.repository.UserRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -14,20 +16,20 @@ import java.util.Optional;
 @Service
 public class TaskService {
 
-    @Autowired
-    private TaskRepository taskRepository;
+    @Autowired private TaskRepository taskRepository;
+    @Autowired private UserRepository userRepository;
 
-    /**
-     * Seed four representative tasks on first startup so the UI isn't empty.
-     * The check prevents re-seeding if the app restarts against a persistent DB.
-     */
+    // ── Seed data ─────────────────────────────────────────────────────────────
+
     @PostConstruct
     public void seedData() {
         if (taskRepository.count() > 0) return;
 
+        // Seed tasks without assignees so they are visible to admin immediately.
+        // Assignees can be set via the UI after users register.
         Task t1 = new Task(null, "Setup EC2 Instance",
                 "Launch and configure AWS EC2", true, "HIGH");
-        t1.setDueDate(LocalDate.now().minusDays(3)); // already done — no overdue badge
+        t1.setDueDate(LocalDate.now().minusDays(3));
 
         Task t2 = new Task(null, "Configure GitHub Actions",
                 "Setup CI/CD pipeline YAML", true, "HIGH");
@@ -35,48 +37,69 @@ public class TaskService {
 
         Task t3 = new Task(null, "Deploy Spring App",
                 "Deploy JAR to EC2 via SSH", false, "MEDIUM");
-        t3.setDueDate(LocalDate.now()); // due today
+        t3.setDueDate(LocalDate.now());
 
         Task t4 = new Task(null, "Setup Health Checks",
                 "Configure /actuator/health endpoint", false, "LOW");
-        t4.setDueDate(LocalDate.now().plusDays(7)); // upcoming
+        t4.setDueDate(LocalDate.now().plusDays(7));
 
         taskRepository.saveAll(List.of(t1, t2, t3, t4));
     }
 
-    // ── Read ─────────────────────────────────────────────────────────────────
-
-    public List<Task> getAllTasks() {
-        return taskRepository.findAll();
-    }
+    // ── Read ──────────────────────────────────────────────────────────────────
 
     /**
-     * Filtered / searched task list.
-     * Any param may be null or blank — the repo query handles it gracefully.
+     * Main search method.
+     *
+     * @param search           keyword filter (title/description)
+     * @param priority         priority filter
+     * @param status           status filter
+     * @param assigneeUsername admin-only filter — restrict to a specific assignee
+     * @param viewerUsername   non-null for ROLE_USER — limits results to that user's tasks
      */
-    public List<Task> searchTasks(String search, String priority, String status) {
-        return taskRepository.search(search, priority, status);
+    public List<Task> searchTasks(String search, String priority, String status,
+                                  String assigneeUsername, String viewerUsername) {
+        return taskRepository.search(search, priority, status, assigneeUsername, viewerUsername);
     }
 
-    public long getCompletedCount() {
-        return taskRepository.countByCompleted(true);
-    }
+    public long getCompletedCount() { return taskRepository.countByCompleted(true); }
+    public long getTotalCount()     { return taskRepository.count(); }
 
-    public long getTotalCount() {
-        return taskRepository.count();
+    /** Tasks due tomorrow with an assigned user who has an email — for the reminder scheduler. */
+    public List<Task> getTasksDueTomorrowWithAssignee() {
+        return taskRepository.findTasksDueTomorrowWithAssignee(LocalDate.now().plusDays(1));
     }
 
     // ── Write ─────────────────────────────────────────────────────────────────
 
     @Transactional
-    public Task addTask(String title, String description, String priority, LocalDate dueDate) {
+    public Task addTask(String title, String description, String priority,
+                        LocalDate dueDate, Long assigneeId) {
         Task task = new Task();
         task.setTitle(title);
         task.setDescription(description);
         task.setPriority(priority);
         task.setCompleted(false);
         task.setDueDate(dueDate);
+
+        if (assigneeId != null) {
+            userRepository.findById(assigneeId).ifPresent(task::setAssignee);
+        }
         return taskRepository.save(task);
+    }
+
+    @Transactional
+    public boolean assignTask(Long taskId, Long assigneeId) {
+        Optional<Task> opt = taskRepository.findById(taskId);
+        if (opt.isEmpty()) return false;
+        Task task = opt.get();
+        if (assigneeId == null) {
+            task.setAssignee(null);
+        } else {
+            userRepository.findById(assigneeId).ifPresent(task::setAssignee);
+        }
+        taskRepository.save(task);
+        return true;
     }
 
     @Transactional
@@ -94,5 +117,11 @@ public class TaskService {
         if (!taskRepository.existsById(id)) return false;
         taskRepository.deleteById(id);
         return true;
+    }
+
+    // ── User list for assignee dropdown ───────────────────────────────────────
+
+    public List<User> getAllUsers() {
+        return userRepository.findAllByOrderByUsernameAsc();
     }
 }

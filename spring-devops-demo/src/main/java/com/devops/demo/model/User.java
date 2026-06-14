@@ -1,6 +1,7 @@
 package com.devops.demo.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -22,20 +23,32 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
-    /** Stored as a BCrypt hash — never plain text. */
+    /** BCrypt hash — never plain text. */
     @Column(nullable = false)
     private String password;
 
     /**
-     * Simple single-role model: "ROLE_USER" or "ROLE_ADMIN".
-     * Spring Security expects the "ROLE_" prefix.
+     * Email address used for due-date reminder notifications.
+     * Optional — if null/blank, reminders are silently skipped for this user.
      */
+    @Email
+    @Column(length = 100)
+    private String email;
+
+    /** "ROLE_USER" or "ROLE_ADMIN". Spring Security expects the ROLE_ prefix. */
     @Column(nullable = false, length = 20)
     private String role = "ROLE_USER";
 
     public User(String username, String password, String role) {
         this.username = username;
         this.password = password;
+        this.role     = role;
+    }
+
+    public User(String username, String password, String email, String role) {
+        this.username = username;
+        this.password = password;
+        this.email    = email;
         this.role     = role;
     }
 }

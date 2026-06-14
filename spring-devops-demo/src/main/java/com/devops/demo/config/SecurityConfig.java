@@ -21,29 +21,20 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    /**
-     * @Lazy breaks the circular dependency:
-     * SecurityConfig → UserService → PasswordEncoder → SecurityConfig
-     */
-    @Autowired
-    @Lazy
+    @Autowired @Lazy
     private UserService userService;
-
-    // ── BCrypt password encoder ───────────────────────────────────────────────
 
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ── Auth provider wires UserService + BCrypt together ────────────────────
-
     @Bean
     public DaoAuthenticationProvider authenticationProvider() {
-        DaoAuthenticationProvider provider = new DaoAuthenticationProvider();
-        provider.setUserDetailsService(userService);
-        provider.setPasswordEncoder(passwordEncoder());
-        return provider;
+        DaoAuthenticationProvider p = new DaoAuthenticationProvider();
+        p.setUserDetailsService(userService);
+        p.setPasswordEncoder(passwordEncoder());
+        return p;
     }
 
     @Bean
@@ -52,34 +43,27 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
-    // ── HTTP security rules ───────────────────────────────────────────────────
-
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
                 .authenticationProvider(authenticationProvider())
-
                 .authorizeHttpRequests(auth -> auth
-                        // Public pages — login, register, static assets
                         .requestMatchers("/login", "/register", "/css/**", "/js/**", "/images/**").permitAll()
-                        // Actuator health endpoint — open for load balancer checks
                         .requestMatchers("/actuator/health").permitAll()
-                        // H2 console — dev only; restrict or remove in production
                         .requestMatchers("/h2-console/**").permitAll()
-                        // Everything else requires a logged-in user
+                        // Admin-only routes
+                        .requestMatchers("/admin/**", "/tasks/add", "/tasks/*/delete", "/tasks/*/assign")
+                        .hasRole("ADMIN")
+                        // All other routes just need authentication
                         .anyRequest().authenticated()
                 )
-
-                // ── Custom login form ─────────────────────────────────────────
                 .formLogin(form -> form
-                        .loginPage("/login")                  // GET  /login  → our login.html
-                        .loginProcessingUrl("/login")          // POST /login  → handled by Security
-                        .defaultSuccessUrl("/", true)          // after login  → home
-                        .failureUrl("/login?error=true")       // bad creds    → login?error
+                        .loginPage("/login")
+                        .loginProcessingUrl("/login")
+                        .defaultSuccessUrl("/", true)
+                        .failureUrl("/login?error=true")
                         .permitAll()
                 )
-
-                // ── Logout ───────────────────────────────────────────────────
                 .logout(logout -> logout
                         .logoutRequestMatcher(new AntPathRequestMatcher("/logout", "POST"))
                         .logoutSuccessUrl("/login?logout=true")
@@ -87,14 +71,8 @@ public class SecurityConfig {
                         .deleteCookies("JSESSIONID")
                         .permitAll()
                 )
-
-                // ── H2 console needs frames + relaxed CSRF ────────────────────
-                .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**")
-                )
-                .headers(headers -> headers
-                        .frameOptions(frame -> frame.sameOrigin())
-                );
+                .csrf(csrf -> csrf.ignoringRequestMatchers("/h2-console/**"))
+                .headers(h -> h.frameOptions(f -> f.sameOrigin()));
 
         return http.build();
     }

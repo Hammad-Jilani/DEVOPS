@@ -1,7 +1,6 @@
 package com.devops.demo.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -9,7 +8,6 @@ import java.time.LocalDate;
 
 @Data
 @NoArgsConstructor
-@AllArgsConstructor
 @Entity
 @Table(name = "tasks")
 public class Task {
@@ -28,23 +26,30 @@ public class Task {
     @Column(nullable = false)
     private String priority;
 
-    /**
-     * Optional due date. Null means no deadline set.
-     * Used for overdue highlighting in the UI.
-     */
+    /** Optional due date — null means no deadline. */
     private LocalDate dueDate;
 
-    // ── Convenience constructor (no dueDate) for seed data ──────────────────
-    public Task(Long id, String title, String description, boolean completed, String priority) {
+    /**
+     * The user this task is assigned to.
+     * Null = unassigned (only admin sees it, no reminder sent).
+     * LAZY fetch prevents N+1 on list pages; explicit join used in queries.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id")
+    private User assignee;
+
+    // ── Convenience constructor without dueDate/assignee (for seed data) ─────
+    public Task(Long id, String title, String description,
+                boolean completed, String priority) {
         this.id          = id;
         this.title       = title;
         this.description = description;
         this.completed   = completed;
         this.priority    = priority;
-        this.dueDate     = null;
     }
 
-    // ── Derived helper — used in Thymeleaf to drive overdue badge ───────────
+    // ── Derived helpers — @Transient, computed at runtime ────────────────────
+
     @Transient
     public boolean isOverdue() {
         return !completed && dueDate != null && dueDate.isBefore(LocalDate.now());
@@ -53,5 +58,12 @@ public class Task {
     @Transient
     public boolean isDueToday() {
         return !completed && dueDate != null && dueDate.isEqual(LocalDate.now());
+    }
+
+    /** True when dueDate is exactly tomorrow — used to trigger email reminders. */
+    @Transient
+    public boolean isDueTomorrow() {
+        return !completed && dueDate != null
+                && dueDate.isEqual(LocalDate.now().plusDays(1));
     }
 }
