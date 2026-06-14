@@ -1,0 +1,31 @@
+# ── Build output ─────────────────────────────────────────────────────────────
+# The multi-stage Dockerfile builds the JAR inside the container.
+# We never want the local target/ dir copied into the build context — it would
+# bloat the context, slow transfers, and risk shipping stale artifacts.
+target/
+
+# ── Git metadata ──────────────────────────────────────────────────────────────
+.git/
+.gitignore
+.gitattributes
+
+# ── GitHub Actions ────────────────────────────────────────────────────────────
+.github/
+
+# ── IDE and OS files ──────────────────────────────────────────────────────────
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ── Local Maven cache ─────────────────────────────────────────────────────────
+# The Dockerfile uses --mount=type=cache for .m2 — the local cache is never needed.
+.m2/
+
+# ── Docker Compose (not needed inside the image) ──────────────────────────────
+docker-compose*.yml
+
+# ── Docs and test reports ─────────────────────────────────────────────────────
+*.md
+docs/

@@ -1,168 +1,274 @@
-name: CI/CD Pipeline → AWS EC2
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Actions CI/CD Pipeline
+# spring-devops-demo → Docker Hub → AWS EC2
+#
+# REQUIRED SECRETS (Settings → Secrets and variables → Actions):
+#
+#   DOCKER_USERNAME      Your Docker Hub username
+#   DOCKER_PASSWORD      Your Docker Hub access token (not your login password)
+#                        Create at: hub.docker.com → Account Settings → Security
+#
+#   EC2_HOST             Public IP or DNS of your EC2 instance  e.g. 54.123.45.67
+#   EC2_USER             SSH user on EC2                         e.g. ubuntu or ec2-user
+#   EC2_SSH_KEY          Full content of your EC2 .pem file (the private key)
+#
+#   MAIL_USERNAME        Gmail address for sending reminder emails
+#   MAIL_PASSWORD        Gmail App Password (16 chars, no spaces)
+#
+#   POSTGRES_DB          Database name                            e.g. devopsdb
+#   POSTGRES_USER        Database user                            e.g. devops
+#   POSTGRES_PASSWORD    Database password (strong, random)
+# ─────────────────────────────────────────────────────────────────────────────
 
+name: CI/CD Pipeline
+
+# ── When does this pipeline run? ─────────────────────────────────────────────
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]          # every push to main triggers the full pipeline
   pull_request:
-    branches: [ main ]
+    branches: [ main ]          # PRs only run CI (build + test), not deployment
+  workflow_dispatch:            # allows manual trigger from the GitHub Actions UI
 
+# ── Shared environment variables ─────────────────────────────────────────────
+# Available to every job and step below.
+# IMAGE_NAME is the Docker Hub repository: username/app-name
 env:
   JAVA_VERSION: '17'
-  APP_NAME: spring-devops-demo
-  DEPLOY_DIR: /opt/spring-devops-demo
+  IMAGE_NAME:   ${{ secrets.DOCKER_USERNAME }}/spring-devops-demo
 
+# ═════════════════════════════════════════════════════════════════════════════
+# JOB 1 — CI: Build + Test
+# Runs on every push and every pull request.
+# Goal: catch compile errors and test failures before any image is built.
+# ═════════════════════════════════════════════════════════════════════════════
 jobs:
-  # ─────────────────────────────────────────
-  # JOB 1: BUILD & TEST
-  # ─────────────────────────────────────────
-  build:
+  build-and-test:
     name: Build & Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest         # GitHub-hosted runner (free for public repos)
 
     steps:
-      - name: Checkout code
+
+      # ── Step 1: Checkout ──────────────────────────────────────────────────
+      # Clones the repository into the runner's workspace.
+      # Without this, the runner has no access to your code.
+      - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up Java ${{ env.JAVA_VERSION }}
+      # ── Step 2: Set up Java ───────────────────────────────────────────────
+      # Installs the exact JDK version defined in env.JAVA_VERSION.
+      # distribution: 'temurin' is Eclipse Temurin (same as our Dockerfile).
+      # cache: 'maven' caches ~/.m2 between runs — dependencies aren't
+      # re-downloaded on every pipeline run, saving 1-2 minutes.
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
+          distribution: temurin
           cache: maven
 
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
+      # ── Step 3: Run tests ─────────────────────────────────────────────────
+      # `mvn verify` compiles, runs unit tests, and runs integration tests.
+      # If any test fails, this step fails and the entire pipeline stops —
+      # the Docker image is never built and deployment never happens.
+      # --no-transfer-progress keeps logs clean (no download progress spam).
+      - name: Run tests
+        run: mvn --no-transfer-progress verify
 
-      - name: Run Tests
-        run: mvn test
-
-      - name: Upload JAR artifact
+      # ── Step 4: Upload test report ────────────────────────────────────────
+      # Uploads Surefire XML test reports as a GitHub artifact.
+      # Visible under Actions → run → Artifacts. Useful for debugging failures.
+      # `if: always()` means this runs even when tests fail — so you always
+      # get the report to investigate.
+      - name: Upload test results
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: app-jar
-          path: target/${{ env.APP_NAME }}.jar
-          retention-days: 5
+          name: test-results
+          path: target/surefire-reports/
+          retention-days: 7           # auto-deleted after 7 days to save storage
 
-  # ─────────────────────────────────────────
-  # JOB 2: SECURITY SCAN (only on PRs)
-  # ─────────────────────────────────────────
-  security-scan:
-    name: Security Scan
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 2 — Docker: Build image and push to Docker Hub
+  # Runs ONLY on pushes to main (not on PRs).
+  # Depends on build-and-test — only runs if tests pass.
+  # ═══════════════════════════════════════════════════════════════════════════
+  docker-build-push:
+    name: Build & Push Docker Image
     runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'pull_request'
+    needs: build-and-test           # wait for Job 1 to succeed
+
+    # Skip this job on pull requests — we don't push images for unmerged code
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    # Permissions needed to write the image digest to the job summary
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      # Pass the image tag to the deploy job so it uses the exact same image
+      image-tag: ${{ steps.meta.outputs.tags }}
 
     steps:
-      - name: Checkout code
+
+      # ── Step 1: Checkout ──────────────────────────────────────────────────
+      - name: Checkout source code
         uses: actions/checkout@v4
 
-      - name: Set up Java ${{ env.JAVA_VERSION }}
-        uses: actions/setup-java@v4
+      # ── Step 2: Set up Docker Buildx ──────────────────────────────────────
+      # Buildx is Docker's extended build engine.
+      # Required for --mount=type=cache (used in our Dockerfile) and for
+      # building multi-platform images (linux/amd64, linux/arm64) if needed.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ── Step 3: Log in to Docker Hub ──────────────────────────────────────
+      # Authenticates the runner with Docker Hub using the secrets you added.
+      # After this step, `docker push` works without manual login.
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: maven
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Run dependency vulnerability check
-        run: mvn dependency:tree -Dincludes=* | grep -i "vulnerable" || echo "No known vulnerabilities found"
+      # ── Step 4: Generate image tags and labels ────────────────────────────
+      # docker/metadata-action automatically creates:
+      #   - A tag from the git SHA:    username/app:sha-abc1234
+      #   - A "latest" tag:            username/app:latest
+      #   - OCI standard image labels (build date, revision, etc.)
+      # Using the SHA tag means every commit produces a uniquely identifiable
+      # image — you can always roll back to an exact commit.
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
 
-  # ─────────────────────────────────────────
-  # JOB 3: DEPLOY TO EC2 (only on main)
-  # ─────────────────────────────────────────
+      # ── Step 5: Build and push ────────────────────────────────────────────
+      # Builds the multi-stage Dockerfile and pushes both tags to Docker Hub.
+      # cache-from/cache-to: uses GitHub Actions cache to store Docker layer
+      # cache between runs. On a cache hit, unchanged layers are not rebuilt —
+      # can cut image build time from 3 min to under 30 seconds.
+      # provenance: false avoids creating a multi-arch manifest that confuses
+      # some older Docker versions on EC2.
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags:    ${{ steps.meta.outputs.tags }}
+          labels:  ${{ steps.meta.outputs.labels }}
+          provenance: false
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      # ── Step 6: Print image digest ────────────────────────────────────────
+      # Writes the image SHA256 digest to the job summary.
+      # Useful for auditing exactly which image was deployed.
+      - name: Image digest
+        run: echo "Pushed image digest ${{ steps.build.outputs.digest }}"
+
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # JOB 3 — Deploy to EC2
+  # Runs ONLY after the Docker image is pushed successfully.
+  # SSHes into the EC2 instance and pulls + restarts the new container.
+  # ═══════════════════════════════════════════════════════════════════════════
   deploy:
-    name: Deploy to AWS EC2
+    name: Deploy to EC2
     runs-on: ubuntu-latest
-    needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-
-    environment:
-      name: production
-      url: http://${{ secrets.EC2_HOST }}:8080
+    needs: docker-build-push        # wait for Job 2 to succeed
+    environment: production         # ties this job to a GitHub "Environment"
+      # (Settings → Environments) where you can
+    # add required reviewers for manual approval
 
     steps:
-      - name: Download JAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: app-jar
 
-      - name: Deploy to EC2 via SSH
+      # ── Step 1: Deploy via SSH ────────────────────────────────────────────
+      # appleboy/ssh-action SSHes into your EC2 instance and runs a bash script.
+      # The script:
+      #   1. Pulls the latest image from Docker Hub
+      #   2. Stops and removes the old container (if any)
+      #   3. Starts a fresh container with all env vars injected from secrets
+      #
+      # Why not docker-compose on EC2?
+      # Using plain `docker run` here keeps the EC2 setup minimal — no compose
+      # file needs to be synced to the server. All config is injected via -e flags.
+      - name: SSH into EC2 and deploy
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          port: 22
+          host:        ${{ secrets.EC2_HOST }}
+          username:    ${{ secrets.EC2_USER }}
+          key:         ${{ secrets.EC2_SSH_KEY }}
+          # Timeout for the SSH connection itself (not the script)
+          timeout:     60s
+          # command_timeout: max time the remote script is allowed to run
+          command_timeout: 5m
           script: |
-            echo "──────────────────────────────────"
-            echo "Starting deployment..."
-            echo "──────────────────────────────────"
 
-            # Create deploy directory
-            sudo mkdir -p ${{ env.DEPLOY_DIR }}
-            sudo chown ${{ secrets.EC2_USER }}:${{ secrets.EC2_USER }} ${{ env.DEPLOY_DIR }}
+            # ── Pull the latest image ──────────────────────────────────────
+            # Always pull so we get the freshly-pushed image.
+            echo "Pulling latest image..."
+            docker pull ${{ env.IMAGE_NAME }}:latest
 
-            # Stop existing app (if running)
-            if [ -f ${{ env.DEPLOY_DIR }}/app.pid ]; then
-              PID=$(cat ${{ env.DEPLOY_DIR }}/app.pid)
-              if kill -0 $PID 2>/dev/null; then
-                echo "Stopping existing process PID=$PID"
-                kill $PID
-                sleep 3
+            # ── Stop and remove the old container ─────────────────────────
+            # `|| true` prevents the step from failing if no container exists
+            # yet (first deployment).
+            echo "Stopping old container..."
+            docker stop  devops-app 2>/dev/null || true
+            docker rm    devops-app 2>/dev/null || true
+
+            # ── Start the new container ────────────────────────────────────
+            # Every secret is injected as an environment variable so nothing
+            # sensitive ever lives on the EC2 filesystem.
+            #
+            # --restart unless-stopped: container auto-restarts after EC2 reboots.
+            # -d: detached mode (runs in background, SSH session can close).
+            # -p 8091:8091: maps host port to container port.
+            # --name devops-app: gives the container a stable name for management.
+            echo "Starting new container..."
+            docker run -d \
+              --name devops-app \
+              --restart unless-stopped \
+              -p 8091:8091 \
+              -e SPRING_DATASOURCE_URL="${{ secrets.SPRING_DATASOURCE_URL }}" \
+              -e SPRING_DATASOURCE_USERNAME="${{ secrets.POSTGRES_USER }}" \
+              -e SPRING_DATASOURCE_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}" \
+              -e SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT="org.hibernate.dialect.PostgreSQLDialect" \
+              -e SPRING_JPA_HIBERNATE_DDL_AUTO="update" \
+              -e SPRING_H2_CONSOLE_ENABLED="false" \
+              -e SPRING_MAIL_USERNAME="${{ secrets.MAIL_USERNAME }}" \
+              -e SPRING_MAIL_PASSWORD="${{ secrets.MAIL_PASSWORD }}" \
+              -e APP_ENVIRONMENT="production" \
+              ${{ env.IMAGE_NAME }}:latest
+
+            # ── Wait for the app to become healthy ─────────────────────────
+            # Polls /actuator/health every 5 seconds for up to 90 seconds.
+            # Fails the deployment if the app never reports UP.
+            echo "Waiting for app to become healthy..."
+            for i in $(seq 1 18); do
+              STATUS=$(curl -sf http://localhost:8091/actuator/health 2>/dev/null \
+                       | grep -o '"status":"UP"' || echo "")
+              if [ -n "$STATUS" ]; then
+                echo "App is UP after $((i * 5)) seconds."
+                break
               fi
-            fi
+              if [ "$i" -eq 18 ]; then
+                echo "Health check timed out after 90 seconds. Deployment failed."
+                docker logs devops-app --tail 50
+                exit 1
+              fi
+              echo "  attempt $i/18 — waiting 5s..."
+              sleep 5
+            done
 
-            echo "Deployment started. Waiting for file upload..."
+            # ── Clean up dangling images ───────────────────────────────────
+            # Removes old untagged images to prevent disk fill-up on the EC2 instance.
+            docker image prune -f
 
-      - name: Upload JAR to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          source: "${{ env.APP_NAME }}.jar"
-          target: "${{ env.DEPLOY_DIR }}/"
-
-      - name: Start Application on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ${{ env.DEPLOY_DIR }}
-
-            # Start the app in background
-            nohup java \
-              -jar ${{ env.APP_NAME }}.jar \
-              --app.environment=production \
-              --app.version=${{ github.sha }} \
-              > app.log 2>&1 &
-
-            echo $! > app.pid
-            echo "App started with PID=$(cat app.pid)"
-
-            # Wait and health check
-            sleep 10
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health)
-
-            if [ "$HTTP_STATUS" = "200" ]; then
-              echo "✅ Health check PASSED (HTTP $HTTP_STATUS)"
-            else
-              echo "❌ Health check FAILED (HTTP $HTTP_STATUS)"
-              cat app.log | tail -30
-              exit 1
-            fi
-
-      - name: Notify on success
-        if: success()
-        run: |
-          echo "✅ Deployment successful!"
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Deployed by: ${{ github.actor }}"
-
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Deployment FAILED"
-          echo "Commit: ${{ github.sha }}"
+            echo "Deployment complete."

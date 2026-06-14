@@ -1,0 +1,69 @@
+# docker-compose.yml — Local development stack
+# Starts the Spring app + PostgreSQL together with one command:
+#   docker compose up --build
+#
+# Secrets are passed via environment variables so nothing sensitive is
+# hard-coded here. Create a .env file (gitignored) with the values below.
+
+services:
+
+  # ── PostgreSQL database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine          # small Alpine-based Postgres image
+    container_name: devops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       ${POSTGRES_DB:-devopsdb}
+      POSTGRES_USER:     ${POSTGRES_USER:-devops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devops_secret}
+    ports:
+      - "5432:5432"                    # expose locally for DB tools (DBeaver, pgAdmin)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # persist data across restarts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devops} -d ${POSTGRES_DB:-devopsdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Spring Boot application ─────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devops-app
+    restart: unless-stopped
+    ports:
+      - "8091:8091"
+    depends_on:
+      db:
+        condition: service_healthy    # wait until Postgres passes its healthcheck
+    environment:
+      # ── Switch from H2 to PostgreSQL ──────────────────────────────────────
+      SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB:-devopsdb}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-devops}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-devops_secret}
+      SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+      # ── Disable H2 console in compose (not needed with Postgres) ──────────
+      SPRING_H2_CONSOLE_ENABLED: "false"
+
+      # ── Email (override with real values in .env) ─────────────────────────
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME:-your-email@gmail.com}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD:-your-app-password}
+
+      # ── App config ────────────────────────────────────────────────────────
+      APP_ENVIRONMENT: docker-local
+      SPRING_PROFILES_ACTIVE: prod
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8091/actuator/health | grep -q 'UP' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+volumes:
+  postgres_data:    # named volume — survives container restarts and rebuilds
