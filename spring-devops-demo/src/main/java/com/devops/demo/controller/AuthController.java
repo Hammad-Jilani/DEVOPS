@@ -13,8 +13,6 @@ public class AuthController {
     @Autowired
     private UserService userService;
 
-    // ── Login ─────────────────────────────────────────────────────────────────
-
     @GetMapping("/login")
     public String loginPage(
             @RequestParam(required = false) String error,
@@ -24,12 +22,8 @@ public class AuthController {
 
         if (error   != null) model.addAttribute("error",   "Invalid username or password.");
         if (logout  != null) model.addAttribute("logout",  "You have been logged out.");
-        // flash "success" arrives as a model attribute from RedirectAttributes,
-        // but handle the query-param form too just in case
         return "login";
     }
-
-    // ── Register ──────────────────────────────────────────────────────────────
 
     @GetMapping("/register")
     public String registerPage() {
@@ -41,7 +35,6 @@ public class AuthController {
             @RequestParam String username,
             @RequestParam String password,
             @RequestParam String confirmPassword,
-            // email is optional — blank string when the user leaves the field empty
             @RequestParam(required = false, defaultValue = "") String email,
             RedirectAttributes ra) {
 

@@ -1,9 +1,4 @@
 #!/bin/bash
-# ============================================================
-# EC2 Setup Script
-# Run this ONCE on your fresh EC2 instance (Amazon Linux 2023 / Ubuntu 22.04)
-# Usage: chmod +x setup-ec2.sh && sudo ./setup-ec2.sh
-# ============================================================
 
 set -e
 

@@ -26,14 +26,8 @@ public class Task {
     @Column(nullable = false)
     private String priority;
 
-    /** Optional due date — null means no deadline. */
     private LocalDate dueDate;
 
-    /**
-     * The user this task is assigned to.
-     * Null = unassigned (only admin sees it, no reminder sent).
-     * LAZY fetch prevents N+1 on list pages; explicit join used in queries.
-     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "assignee_id")
     private User assignee;
@@ -48,8 +42,6 @@ public class Task {
         this.priority    = priority;
     }
 
-    // ── Derived helpers — @Transient, computed at runtime ────────────────────
-
     @Transient
     public boolean isOverdue() {
         return !completed && dueDate != null && dueDate.isBefore(LocalDate.now());
@@ -60,7 +52,6 @@ public class Task {
         return !completed && dueDate != null && dueDate.isEqual(LocalDate.now());
     }
 
-    /** True when dueDate is exactly tomorrow — used to trigger email reminders. */
     @Transient
     public boolean isDueTomorrow() {
         return !completed && dueDate != null

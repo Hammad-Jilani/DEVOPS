@@ -1,13 +1,6 @@
-# docker-compose.yml — Local development stack
-# Starts the Spring app + PostgreSQL together with one command:
-#   docker compose up --build
-#
-# Secrets are passed via environment variables so nothing sensitive is
-# hard-coded here. Create a .env file (gitignored) with the values below.
 
 services:
 
-  # ── PostgreSQL database ─────────────────────────────────────────────────────
   db:
     image: postgres:16-alpine          # small Alpine-based Postgres image
     container_name: devops-db
@@ -26,7 +19,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Spring Boot application ─────────────────────────────────────────────────
   app:
     build:
       context: .
@@ -39,7 +31,6 @@ services:
       db:
         condition: service_healthy    # wait until Postgres passes its healthcheck
     environment:
-      # ── Switch from H2 to PostgreSQL ──────────────────────────────────────
       SPRING_DATASOURCE_URL:      jdbc:postgresql://db:5432/${POSTGRES_DB:-devopsdb}
       SPRING_DATASOURCE_DRIVER_CLASS_NAME: org.postgresql.Driver
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-devops}
@@ -47,14 +38,11 @@ services:
       SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT: org.hibernate.dialect.PostgreSQLDialect
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
 
-      # ── Disable H2 console in compose (not needed with Postgres) ──────────
       SPRING_H2_CONSOLE_ENABLED: "false"
 
-      # ── Email (override with real values in .env) ─────────────────────────
       SPRING_MAIL_USERNAME: ${MAIL_USERNAME:-your-email@gmail.com}
       SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD:-your-app-password}
 
-      # ── App config ────────────────────────────────────────────────────────
       APP_ENVIRONMENT: docker-local
       SPRING_PROFILES_ACTIVE: prod
 

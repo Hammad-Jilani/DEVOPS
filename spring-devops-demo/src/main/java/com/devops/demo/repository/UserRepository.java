@@ -15,13 +15,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByUsername(String username);
 
-    /** All users ordered by username — used to populate the assignee dropdown. */
     List<User> findAllByOrderByUsernameAsc();
 
-    /**
-     * Users who have a non-null email — the only ones we can send reminders to.
-     * Used by the reminder scheduler to fetch candidates efficiently.
-     */
     @Query("SELECT u FROM User u WHERE u.email IS NOT NULL AND u.email <> ''")
     List<User> findAllWithEmail();
 }

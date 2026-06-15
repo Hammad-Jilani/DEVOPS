@@ -20,8 +20,6 @@ public class UserService implements UserDetailsService {
     @Autowired private UserRepository userRepository;
     @Autowired @Lazy private PasswordEncoder passwordEncoder;
 
-    // ── Seed admin ───────────────────────────────────────────────────────────
-
     @PostConstruct
     public void seedAdmin() {
         if (!userRepository.existsByUsername("admin")) {
@@ -32,9 +30,6 @@ public class UserService implements UserDetailsService {
             userRepository.save(admin);
         }
     }
-
-    // ── Spring Security ───────────────────────────────────────────────────────
-
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         User user = userRepository.findByUsername(username)
@@ -45,9 +40,6 @@ public class UserService implements UserDetailsService {
                 List.of(new SimpleGrantedAuthority(user.getRole()))
         );
     }
-
-    // ── Registration ──────────────────────────────────────────────────────────
-
     @Transactional
     public User register(String username, String rawPassword, String email) {
         if (userRepository.existsByUsername(username)) {

@@ -9,22 +9,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.stereotype.Controller;
 
-/**
- * Admin-only endpoints.
- * @PreAuthorize blocks non-admins at the method level (defence in depth on top
- * of the SecurityConfig route rules).
- */
 @Controller
 @RequestMapping("/admin")
 public class AdminController {
 
     @Autowired private EmailReminderService emailReminderService;
-
-    /**
-     * POST /admin/reminders/trigger
-     * Manually fires the reminder batch right now.
-     * Useful for testing email config without waiting for the daily cron.
-     */
     @PostMapping("/reminders/trigger")
     @PreAuthorize("hasRole('ADMIN')")
     public String triggerReminders(RedirectAttributes ra) {

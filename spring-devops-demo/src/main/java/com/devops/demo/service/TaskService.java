@@ -19,8 +19,6 @@ public class TaskService {
     @Autowired private TaskRepository taskRepository;
     @Autowired private UserRepository userRepository;
 
-    // ── Seed data ─────────────────────────────────────────────────────────────
-
     @PostConstruct
     public void seedData() {
         if (taskRepository.count() > 0) return;
@@ -46,17 +44,7 @@ public class TaskService {
         taskRepository.saveAll(List.of(t1, t2, t3, t4));
     }
 
-    // ── Read ──────────────────────────────────────────────────────────────────
 
-    /**
-     * Main search method.
-     *
-     * @param search           keyword filter (title/description)
-     * @param priority         priority filter
-     * @param status           status filter
-     * @param assigneeUsername admin-only filter — restrict to a specific assignee
-     * @param viewerUsername   non-null for ROLE_USER — limits results to that user's tasks
-     */
     public List<Task> searchTasks(String search, String priority, String status,
                                   String assigneeUsername, String viewerUsername) {
         return taskRepository.search(search, priority, status, assigneeUsername, viewerUsername);
@@ -65,12 +53,9 @@ public class TaskService {
     public long getCompletedCount() { return taskRepository.countByCompleted(true); }
     public long getTotalCount()     { return taskRepository.count(); }
 
-    /** Tasks due tomorrow with an assigned user who has an email — for the reminder scheduler. */
     public List<Task> getTasksDueTomorrowWithAssignee() {
         return taskRepository.findTasksDueTomorrowWithAssignee(LocalDate.now().plusDays(1));
     }
-
-    // ── Write ─────────────────────────────────────────────────────────────────
 
     @Transactional
     public Task addTask(String title, String description, String priority,
@@ -119,7 +104,6 @@ public class TaskService {
         return true;
     }
 
-    // ── User list for assignee dropdown ───────────────────────────────────────
 
     public List<User> getAllUsers() {
         return userRepository.findAllByOrderByUsernameAsc();

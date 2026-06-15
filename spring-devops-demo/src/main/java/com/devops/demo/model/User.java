@@ -23,19 +23,13 @@ public class User {
     @Column(nullable = false, unique = true, length = 50)
     private String username;
 
-    /** BCrypt hash — never plain text. */
     @Column(nullable = false)
     private String password;
 
-    /**
-     * Email address used for due-date reminder notifications.
-     * Optional — if null/blank, reminders are silently skipped for this user.
-     */
     @Email
     @Column(length = 100)
     private String email;
 
-    /** "ROLE_USER" or "ROLE_ADMIN". Spring Security expects the ROLE_ prefix. */
     @Column(nullable = false, length = 20)
     private String role = "ROLE_USER";
 

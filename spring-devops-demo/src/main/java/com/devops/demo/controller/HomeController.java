@@ -23,7 +23,6 @@ public class HomeController {
     @Value("${app.version:2.0.0}") private String appVersion;
     @Value("${app.environment:development}") private String environment;
 
-    // ── Home ─────────────────────────────────────────────────────────────────
 
     @GetMapping("/")
     public String home(
@@ -37,8 +36,6 @@ public class HomeController {
         boolean isAdmin = auth.getAuthorities()
                 .contains(new SimpleGrantedAuthority("ROLE_ADMIN"));
 
-        // Admins see ALL tasks (filtered by assigneeUsername if chosen).
-        // Regular users see ONLY their own assigned tasks.
         String viewerUsername = isAdmin ? null : auth.getName();
 
         long total     = taskService.getTotalCount();
@@ -66,7 +63,6 @@ public class HomeController {
         return "index";
     }
 
-    // ── Add task (admin only) ─────────────────────────────────────────────────
 
     @PostMapping("/tasks/add")
     public String addTask(
@@ -83,7 +79,6 @@ public class HomeController {
         return "redirect:/";
     }
 
-    // ── Assign task (admin only) ──────────────────────────────────────────────
 
     @PostMapping("/tasks/{id}/assign")
     public String assignTask(
@@ -97,7 +92,6 @@ public class HomeController {
         return "redirect:/";
     }
 
-    // ── Toggle completed ──────────────────────────────────────────────────────
 
     @PostMapping("/tasks/{id}/toggle")
     public String toggleTask(@PathVariable Long id, RedirectAttributes ra) {
@@ -107,7 +101,6 @@ public class HomeController {
         return "redirect:/";
     }
 
-    // ── Delete (admin only) ───────────────────────────────────────────────────
 
     @PostMapping("/tasks/{id}/delete")
     public String deleteTask(@PathVariable Long id, RedirectAttributes ra) {

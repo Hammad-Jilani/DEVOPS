@@ -13,20 +13,6 @@ import java.util.List;
 @Repository
 public interface TaskRepository extends JpaRepository<Task, Long> {
 
-    /**
-     * Unified search used by admin (sees all tasks) and regular users (see only
-     * their assigned tasks).
-     *
-     * - search    : keyword matched against title + description (case-insensitive)
-     * - priority  : exact match or blank to skip
-     * - status    : "COMPLETED" | "PENDING" | blank to skip
-     * - assigneeUsername : exact username match or blank to skip (admin filter)
-     * - viewerUsername   : when non-blank, restricts to tasks assigned to this user
-     *                      (used for ROLE_USER views)
-     *
-     * LEFT JOIN FETCH loads the assignee in the same query — avoids LazyInit errors
-     * and N+1 selects on the task list page.
-     */
     @Query("""
         SELECT DISTINCT t FROM Task t
         LEFT JOIN FETCH t.assignee a
@@ -54,8 +40,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
             @Param("assigneeUsername") String assigneeUsername,
             @Param("viewerUsername")   String viewerUsername
     );
-
-    /** Tasks due tomorrow with a non-null assignee who has an email — for reminders. */
     @Query("""
         SELECT t FROM Task t
         JOIN FETCH t.assignee a
@@ -66,7 +50,6 @@ public interface TaskRepository extends JpaRepository<Task, Long> {
     """)
     List<Task> findTasksDueTomorrowWithAssignee(@Param("tomorrow") LocalDate tomorrow);
 
-    /** Tasks assigned to a specific user (used for user-facing home view). */
     List<Task> findByAssignee(User assignee);
 
     long countByCompleted(boolean completed);

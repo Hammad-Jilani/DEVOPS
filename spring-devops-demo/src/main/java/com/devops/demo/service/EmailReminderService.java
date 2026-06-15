@@ -15,15 +15,6 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-/**
- * Sends due-date reminder emails to task assignees.
- *
- * Runs once a day (default: 08:00 server time, configurable via app.reminder.cron).
- * Only sends if:
- *   - The task is not yet completed
- *   - The due date is exactly tomorrow
- *   - The assignee has a non-null, non-blank email address
- */
 @Service
 public class EmailReminderService {
 
@@ -36,11 +27,6 @@ public class EmailReminderService {
     @Value("${spring.mail.username}")
     private String fromAddress;
 
-    /**
-     * Scheduled reminder job.
-     * Cron expression is externalised to application.properties so it can be
-     * overridden per environment without recompiling.
-     */
     @Scheduled(cron = "${app.reminder.cron:0 0 8 * * *}")
     public void sendDueTomorrowReminders() {
         List<Task> tasks = taskService.getTasksDueTomorrowWithAssignee();
@@ -69,7 +55,6 @@ public class EmailReminderService {
         }
     }
 
-    // ── Email builder ─────────────────────────────────────────────────────────
 
     private SimpleMailMessage buildReminderEmail(Task task, String name, String to) {
         String dueFormatted = task.getDueDate().format(DATE_FMT);
@@ -93,12 +78,6 @@ public class EmailReminderService {
         return msg;
     }
 
-    /**
-     * Manual trigger for testing — sends reminders right now regardless of schedule.
-     * Exposed via AdminController so admins can test email from the UI.
-     *
-     * @return number of emails sent
-     */
     public int triggerNow() {
         List<Task> tasks = taskService.getTasksDueTomorrowWithAssignee();
         int sent = 0;
